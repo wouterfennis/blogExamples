@@ -19,6 +19,8 @@ namespace WebApi
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
 
+            var configuration = builder.Configuration.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+                .Build();
 
             // 2
             builder.Services.Configure<ForwardedHeadersOptions>(options =>
@@ -34,6 +36,7 @@ namespace WebApi
             }).AddCertificateForwarding(options =>
             {
                 options.CertificateHeader = "X-ARR-ClientCert"; // This is standard with App Services
+
                 options.HeaderConverter = (headerValue) =>
                 {
                     if (string.IsNullOrEmpty(headerValue))
@@ -55,7 +58,7 @@ namespace WebApi
                 {
                     OnCertificateValidated = context =>
                     {
-                        var isValid = "YOUR_CERTIFICATE_THUMBPRINT".Equals(context.ClientCertificate.Thumbprint, StringComparison.OrdinalIgnoreCase);
+                        var isValid = configuration["TrustedThumbprint"]!.Equals(context.ClientCertificate.Thumbprint, StringComparison.OrdinalIgnoreCase);
 
                         if (isValid)
                         {
