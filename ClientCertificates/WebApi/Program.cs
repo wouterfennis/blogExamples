@@ -1,6 +1,7 @@
-
 using Microsoft.AspNetCore.Authentication.Certificate;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.AspNetCore.Server.Kestrel.Https;
 using System.Security.Claims;
 using System.Security.Cryptography.X509Certificates;
 
@@ -11,6 +12,15 @@ namespace WebApi
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
+
+            // Request client certificates and require them for all requests
+            builder.Services.Configure<KestrelServerOptions>(options =>
+            {
+                options.ConfigureHttpsDefaults(options =>
+                {
+                    options.ClientCertificateMode = ClientCertificateMode.RequireCertificate;
+                });
+            });
 
             // Add services to the container.
 
@@ -35,7 +45,7 @@ namespace WebApi
                 options.KnownProxies.Clear();
             }).AddCertificateForwarding(options =>
             {
-                options.CertificateHeader = "X-ARR-ClientCert"; // This is standard with App Services
+                //options.CertificateHeader = "X-ARR-ClientCert"; // This is standard with App Services
 
                 options.HeaderConverter = (headerValue) =>
                 {
@@ -51,7 +61,7 @@ namespace WebApi
             .AddCertificate(options =>
             {
                 options.AllowedCertificateTypes = CertificateTypes.All;
-                options.RevocationMode = X509RevocationMode.Online;
+                options.RevocationMode = X509RevocationMode.NoCheck;
                 options.ValidateCertificateUse = true;
                 options.ValidateValidityPeriod = true;
                 options.Events = new CertificateAuthenticationEvents
@@ -68,6 +78,7 @@ namespace WebApi
                         else
                         {
                             context.Fail("Invalid certificate");
+                            Console.WriteLine("Invalid certificate");
                         }
 
                         return Task.CompletedTask;
@@ -89,6 +100,8 @@ namespace WebApi
             // This will make the client certificate available to the application
             app.UseForwardedHeaders();
             app.UseCertificateForwarding();
+
+            app.UseAuthentication();
 
             app.UseHttpsRedirection();
 
