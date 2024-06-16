@@ -13,7 +13,7 @@ namespace WebApi
         {
             var builder = WebApplication.CreateBuilder(args);
 
-            // Request client certificates and require them for all requests
+            // 1. Request client certificates and require them for all requests
             builder.Services.Configure<KestrelServerOptions>(options =>
             {
                 options.ConfigureHttpsDefaults(options =>
@@ -37,13 +37,16 @@ namespace WebApi
             {
                 // This will forward the X-Forwarded-For and X-Forwarded-Proto headers
                 options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-                
+
                 // This will forward the X-Forwarded-Host header
                 options.KnownNetworks.Clear();
 
                 // This will forward the X-Forwarded-Host header
                 options.KnownProxies.Clear();
-            }).AddCertificateForwarding(options =>
+            });
+
+            // 3
+            builder.Services.AddCertificateForwarding(options =>
             {
                 //options.CertificateHeader = "X-ARR-ClientCert"; // This is standard with App Services
 
@@ -57,34 +60,38 @@ namespace WebApi
                     var bytes = Convert.FromBase64String(headerValue);
                     return new X509Certificate2(bytes);
                 };
-            }).AddAuthentication("Certificate")
-            .AddCertificate(options =>
-            {
-                options.AllowedCertificateTypes = CertificateTypes.All;
-                options.RevocationMode = X509RevocationMode.NoCheck;
-                options.ValidateCertificateUse = true;
-                options.ValidateValidityPeriod = true;
-                options.Events = new CertificateAuthenticationEvents
-                {
-                    OnCertificateValidated = context =>
-                    {
-                        var isValid = configuration["TrustedThumbprint"]!.Equals(context.ClientCertificate.Thumbprint, StringComparison.OrdinalIgnoreCase);
-
-                        if (isValid)
-                        {
-                            context.Principal = new ClaimsPrincipal(new ClaimsIdentity("Certificate"));
-                            context.Success();
-                        }
-                        else
-                        {
-                            context.Fail("Invalid certificate");
-                            Console.WriteLine("Invalid certificate");
-                        }
-
-                        return Task.CompletedTask;
-                    }
-                };
             });
+
+            // 4
+            builder.Services
+                .AddAuthentication(CertificateAuthenticationDefaults.AuthenticationScheme)
+                .AddCertificate(options =>
+                {
+                    options.AllowedCertificateTypes = CertificateTypes.All; /// This is just for demo purposes. Normally a real application should check chained certificates.
+                    options.RevocationMode = X509RevocationMode.NoCheck; // This is just for demo purposes. Normally a real application should check revocation.
+                    options.ValidateCertificateUse = true; // This is normally already true by default
+                    options.ValidateValidityPeriod = true; // This is normally already true by default
+                    options.Events = new CertificateAuthenticationEvents
+                    {
+                        OnCertificateValidated = context =>
+                        {
+                            var isValid = configuration["TrustedThumbprint"]!.Equals(context.ClientCertificate.Thumbprint, StringComparison.OrdinalIgnoreCase);
+
+                            if (isValid)
+                            {
+                                context.Principal = new ClaimsPrincipal(new ClaimsIdentity("TheCertificateUser"));
+                                context.Success();
+                            }
+                            else
+                            {
+                                context.Fail("Invalid certificate");
+                                Console.WriteLine("Invalid certificate");
+                            }
+
+                            return Task.CompletedTask;
+                        }
+                    };
+                });
 
             var app = builder.Build();
 
@@ -95,7 +102,7 @@ namespace WebApi
                 app.UseSwaggerUI();
             }
 
-            // 1
+            // 5
             // Forwarded headers and certificate forwarding are required for running behind a reverse proxy
             // This will make the client certificate available to the application
             app.UseForwardedHeaders();
